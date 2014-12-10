@@ -33,8 +33,12 @@ class CodeGenContext {
 
 public:
     Module *module;
-    CodeGenContext() { module = new Module("main", getGlobalContext()); }
-    
+    CodeGenContext() {
+        // see http://comments.gmane.org/gmane.comp.compilers.llvm.devel/33877
+        InitializeNativeTarget();
+        module = new Module("main", getGlobalContext());
+    }
+
     void generateCode(NBlock& root);
     GenericValue runCode();
     std::map<std::string, Value*>& locals() { return blocks.top()->locals; }

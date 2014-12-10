@@ -8,19 +8,19 @@ using namespace std;
 void CodeGenContext::generateCode(NBlock& root)
 {
 	std::cout << "Generating code...\n";
-	
+
 	/* Create the top level interpreter function to call as entry */
 	vector<Type*> argTypes;
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()), makeArrayRef(argTypes), false);
 	mainFunction = Function::Create(ftype, GlobalValue::InternalLinkage, "main", module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", mainFunction, 0);
-	
+
 	/* Push a new variable/block context */
 	pushBlock(bblock);
 	root.codeGen(*this); /* emit bytecode for the toplevel block */
 	ReturnInst::Create(getGlobalContext(), bblock);
 	popBlock();
-	
+
 	/* Print the bytecode in a human-readable format 
 	   to see if our program compiled properly
 	 */
@@ -41,7 +41,7 @@ GenericValue CodeGenContext::runCode() {
 }
 
 /* Returns an LLVM type based on the identifier */
-static Type *typeOf(const NIdentifier& type) 
+static Type *typeOf(const NIdentifier& type)
 {
 	if (type.name.compare("int") == 0) {
 		return Type::getInt64Ty(getGlobalContext());
@@ -97,17 +97,24 @@ Value* NBinaryOperator::codeGen(CodeGenContext& context)
 	std::cout << "Creating binary operation " << op << endl;
 	Instruction::BinaryOps instr;
 	switch (op) {
-		case TPLUS: 	instr = Instruction::Add; goto math;
-		case TMINUS: 	instr = Instruction::Sub; goto math;
-		case TMUL: 		instr = Instruction::Mul; goto math;
-		case TDIV: 		instr = Instruction::SDiv; goto math;
-				
+		case TPLUS:
+            instr = Instruction::Add;
+            break;
+		case TMINUS:
+            instr = Instruction::Sub;
+            break;
+		case TMUL:
+            instr = Instruction::Mul;
+            break;
+		case TDIV:
+            instr = Instruction::SDiv;
+            break;
 		/* TODO comparison */
+        default:
+            return NULL;
 	}
 
-	return NULL;
-math:
-	return BinaryOperator::Create(instr, lhs.codeGen(context), 
+	return BinaryOperator::Create(instr, lhs.codeGen(context),
 		rhs.codeGen(context), "", context.currentBlock());
 }
 
@@ -189,12 +196,12 @@ Value* NFunctionDeclaration::codeGen(CodeGenContext& context)
 
 	for (it = arguments.begin(); it != arguments.end(); it++) {
 		(**it).codeGen(context);
-		
+
 		argumentValue = argsValues++;
 		argumentValue->setName((*it)->id.name.c_str());
 		StoreInst *inst = new StoreInst(argumentValue, context.locals()[(*it)->id.name], false, bblock);
 	}
-	
+
 	block.codeGen(context);
 	ReturnInst::Create(getGlobalContext(), context.getCurrentReturnValue(), bblock);
 
