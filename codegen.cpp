@@ -4,6 +4,14 @@
 
 using namespace std;
 
+Value *CodeGenBlock::findLocal(std::string name) {
+    if (locals.find(name) == locals.end()) {
+        return parent ? parent->findLocal(name) : nullptr;
+    } else {
+        return locals[name];
+    }
+}
+
 /* Compile the AST into a module */
 void CodeGenContext::generateCode(NBlock& root)
 {
@@ -28,6 +36,21 @@ void CodeGenContext::generateCode(NBlock& root)
 	PassManager pm;
 	pm.add(createPrintModulePass(outs()));
 	pm.run(*module);
+}
+
+void CodeGenContext::pushBlock(BasicBlock *block) {
+    CodeGenBlock *child  = new CodeGenBlock();
+    child->block = block;
+    if (!blocks.empty()) {
+        child->parent = blocks.top();
+    }
+    blocks.push(child);
+}
+
+void CodeGenContext::popBlock() {
+    CodeGenBlock *top = blocks.top();
+    blocks.pop();
+    delete top;
 }
 
 /* Executes the AST by running the main function */
@@ -69,17 +92,18 @@ Value* NDouble::codeGen(CodeGenContext& context)
 Value* NIdentifier::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating identifier reference: " << name << endl;
-	if (context.locals().find(name) == context.locals().end()) {
+    Value *var = context.findLocal(name);
+	if (!var) {
 		std::cerr << "undeclared variable " << name << endl;
-		return NULL;
+		return nullptr;
 	}
-	return new LoadInst(context.locals()[name], "", false, context.currentBlock());
+	return new LoadInst(var, "", false, context.currentBlock());
 }
 
 Value* NMethodCall::codeGen(CodeGenContext& context)
 {
 	Function *function = context.module->getFunction(id.name.c_str());
-	if (function == NULL) {
+	if (!function) {
 		std::cerr << "no such function " << id.name << endl;
 	}
 	std::vector<Value*> args;
@@ -111,7 +135,7 @@ Value* NBinaryOperator::codeGen(CodeGenContext& context)
             break;
 		/* TODO comparison */
         default:
-            return NULL;
+            return nullptr;
 	}
 
 	return BinaryOperator::Create(instr, lhs.codeGen(context),
@@ -121,17 +145,17 @@ Value* NBinaryOperator::codeGen(CodeGenContext& context)
 Value* NAssignment::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating assignment for " << lhs.name << endl;
-	if (context.locals().find(lhs.name) == context.locals().end()) {
+	if (!context.findLocal(lhs.name)) {
 		std::cerr << "undeclared variable " << lhs.name << endl;
-		return NULL;
+		return nullptr;
 	}
-	return new StoreInst(rhs.codeGen(context), context.locals()[lhs.name], false, context.currentBlock());
+	return new StoreInst(rhs.codeGen(context), context.findLocal(lhs.name), false, context.currentBlock());
 }
 
 Value* NBlock::codeGen(CodeGenContext& context)
 {
 	StatementList::const_iterator it;
-	Value *last = NULL;
+	Value *last = nullptr;
 	for (it = statements.begin(); it != statements.end(); it++) {
 		std::cout << "Generating code for " << typeid(**it).name() << endl;
 		last = (**it).codeGen(context);
@@ -157,13 +181,19 @@ Value* NReturnStatement::codeGen(CodeGenContext& context)
 Value* NVariableDeclaration::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating variable declaration " << type.name << " " << id.name << endl;
-	AllocaInst *alloc = new AllocaInst(typeOf(type), id.name.c_str(), context.currentBlock());
-	context.locals()[id.name] = alloc;
-	if (assignmentExpr != NULL) {
+    Value* var = nullptr;
+    if (context.isGlobalContext()) {
+        var = new GlobalVariable(*(context.module), typeOf(type), false, GlobalValue::PrivateLinkage,
+                Constant::getNullValue(typeOf(type)), id.name.c_str());
+    } else {
+        var = new AllocaInst(typeOf(type), id.name.c_str(), context.currentBlock());
+    }
+	context.locals()[id.name] = var;
+	if (assignmentExpr) {
 		NAssignment assn(id, *assignmentExpr);
 		assn.codeGen(context);
 	}
-	return alloc;
+	return var;
 }
 
 Value* NExternDeclaration::codeGen(CodeGenContext& context)
@@ -199,7 +229,7 @@ Value* NFunctionDeclaration::codeGen(CodeGenContext& context)
 
 		argumentValue = argsValues++;
 		argumentValue->setName((*it)->id.name.c_str());
-		StoreInst *inst = new StoreInst(argumentValue, context.locals()[(*it)->id.name], false, bblock);
+		StoreInst *inst = new StoreInst(argumentValue, context.findLocal((*it)->id.name), false, bblock);
 	}
 
 	block.codeGen(context);

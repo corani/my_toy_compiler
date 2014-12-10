@@ -10,6 +10,7 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
@@ -25,6 +26,11 @@ public:
     BasicBlock *block;
     Value *returnValue;
     std::map<std::string, Value*> locals;
+    CodeGenBlock *parent;
+
+    CodeGenBlock() : returnValue(nullptr), parent(nullptr) {}
+
+    Value *findLocal(std::string name);
 };
 
 class CodeGenContext {
@@ -43,8 +49,10 @@ public:
     GenericValue runCode();
     std::map<std::string, Value*>& locals() { return blocks.top()->locals; }
     BasicBlock *currentBlock() { return blocks.top()->block; }
-    void pushBlock(BasicBlock *block) { blocks.push(new CodeGenBlock()); blocks.top()->returnValue = NULL; blocks.top()->block = block; }
-    void popBlock() { CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
+    void pushBlock(BasicBlock *block);
+    void popBlock();
     void setCurrentReturnValue(Value *value) { blocks.top()->returnValue = value; }
     Value* getCurrentReturnValue() { return blocks.top()->returnValue; }
+    bool isGlobalContext() { return !blocks.top()->parent; }
+    Value* findLocal(std::string name) { return blocks.top()->findLocal(name); }
 };

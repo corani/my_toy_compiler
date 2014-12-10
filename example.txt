@@ -1,8 +1,10 @@
 extern void printi(int val)
 
+int b = 3
+
 int do_math(int a) {
   int x = a * 5
-  return x + 3
+  return x + b
 }
 
 echo(do_math(11))
