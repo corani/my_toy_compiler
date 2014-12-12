@@ -45,12 +45,17 @@ void CodeGenContext::pushBlock(BasicBlock *block) {
         child->parent = blocks.top();
     }
     blocks.push(child);
+
+    builder.SetInsertPoint(blocks.top()->block);
 }
 
 void CodeGenContext::popBlock() {
     CodeGenBlock *top = blocks.top();
     blocks.pop();
     delete top;
+    if (!blocks.empty()) {
+        builder.SetInsertPoint(blocks.top()->block);
+    }
 }
 
 /* Executes the AST by running the main function */
@@ -74,6 +79,9 @@ static Type *typeOf(const NIdentifier& type)
 	}
     else if (type.name.compare("bool") == 0) {
         return Type::getInt1Ty(getGlobalContext());
+    }
+    else if (type.name.compare("void") == 0) {
+        return Type::getVoidTy(getGlobalContext());
     }
 	return Type::getVoidTy(getGlobalContext());
 }
@@ -106,7 +114,7 @@ Value* NIdentifier::codeGen(CodeGenContext& context)
 		std::cerr << "undeclared variable " << name << endl;
 		return nullptr;
 	}
-	return new LoadInst(var, "", false, context.currentBlock());
+    return context.builder.CreateLoad(var);
 }
 
 Value* NMethodCall::codeGen(CodeGenContext& context)
@@ -120,9 +128,8 @@ Value* NMethodCall::codeGen(CodeGenContext& context)
 	for (it = arguments.begin(); it != arguments.end(); it++) {
 		args.push_back((**it).codeGen(context));
 	}
-	CallInst *call = CallInst::Create(function, makeArrayRef(args), "", context.currentBlock());
 	std::cout << "Creating method call: " << id.name << endl;
-	return call;
+    return context.builder.CreateCall(function, makeArrayRef(args));
 }
 
 Value* NBinaryOperator::codeGen(CodeGenContext& context)
@@ -131,29 +138,27 @@ Value* NBinaryOperator::codeGen(CodeGenContext& context)
     Value* left = lhs.codeGen(context);
     Value* right= rhs.codeGen(context);
 
-    IRBuilder<> builder(getGlobalContext());
-    builder.SetInsertPoint(context.currentBlock());
 	switch (op) {
 		case TPLUS:
-            return builder.CreateAdd(left, right);
+            return context.builder.CreateAdd(left, right);
 		case TMINUS:
-            return builder.CreateSub(left, right);
+            return context.builder.CreateSub(left, right);
 		case TMUL:
-            return builder.CreateMul(left, right);
+            return context.builder.CreateMul(left, right);
 		case TDIV:
-            return builder.CreateSDiv(left, right);
+            return context.builder.CreateSDiv(left, right);
         case TCEQ:
-            return builder.CreateICmpEQ(left, right);
+            return context.builder.CreateICmpEQ(left, right);
         case TCNE:
-            return builder.CreateICmpNE(left, right);
+            return context.builder.CreateICmpNE(left, right);
         case TCLT:
-            return builder.CreateICmpSLT(left, right);
+            return context.builder.CreateICmpSLT(left, right);
         case TCLE:
-            return builder.CreateICmpSLE(left, right);
+            return context.builder.CreateICmpSLE(left, right);
         case TCGT:
-            return builder.CreateICmpSGT(left, right);
+            return context.builder.CreateICmpSGT(left, right);
         case TCGE:
-            return builder.CreateICmpSGE(left, right);
+            return context.builder.CreateICmpSGE(left, right);
         default:
             return nullptr;
 	}
@@ -162,11 +167,14 @@ Value* NBinaryOperator::codeGen(CodeGenContext& context)
 Value* NAssignment::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating assignment for " << lhs.name << endl;
-	if (!context.findLocal(lhs.name)) {
-		std::cerr << "undeclared variable " << lhs.name << endl;
-		return nullptr;
-	}
-	return new StoreInst(rhs.codeGen(context), context.findLocal(lhs.name), false, context.currentBlock());
+    Value* var = context.findLocal(lhs.name);
+	if (var) {
+        Value* val = rhs.codeGen(context);
+        return context.builder.CreateStore(val, var);
+    } else {
+        std::cerr << "undeclared variable " << lhs.name << endl;
+        return nullptr;
+    }
 }
 
 Value* NBlock::codeGen(CodeGenContext& context)
@@ -190,9 +198,13 @@ Value* NExpressionStatement::codeGen(CodeGenContext& context)
 Value* NReturnStatement::codeGen(CodeGenContext& context)
 {
 	std::cout << "Generating return code for " << typeid(expression).name() << endl;
-	Value *returnValue = expression.codeGen(context);
-	context.setCurrentReturnValue(returnValue);
-	return returnValue;
+    if (expression) {
+        Value *returnValue = expression->codeGen(context);
+	    context.setCurrentReturnValue(returnValue);
+        return returnValue;
+    } else {
+        return nullptr;
+    }
 }
 
 Value* NVariableDeclaration::codeGen(CodeGenContext& context)
@@ -203,7 +215,7 @@ Value* NVariableDeclaration::codeGen(CodeGenContext& context)
         var = new GlobalVariable(*(context.module), typeOf(type), false, GlobalValue::PrivateLinkage,
                 Constant::getNullValue(typeOf(type)), id.name.c_str());
     } else {
-        var = new AllocaInst(typeOf(type), id.name.c_str(), context.currentBlock());
+        var = context.builder.CreateAlloca(typeOf(type));
     }
 	context.locals()[id.name] = var;
 	if (assignmentExpr) {
@@ -246,11 +258,12 @@ Value* NFunctionDeclaration::codeGen(CodeGenContext& context)
 
 		argumentValue = argsValues++;
 		argumentValue->setName((*it)->id.name.c_str());
-		StoreInst *inst = new StoreInst(argumentValue, context.findLocal((*it)->id.name), false, bblock);
+
+        context.builder.CreateStore(argumentValue, context.findLocal((*it)->id.name));
 	}
 
 	block.codeGen(context);
-	ReturnInst::Create(getGlobalContext(), context.getCurrentReturnValue(), bblock);
+    ReturnInst::Create(getGlobalContext(), context.getCurrentReturnValue(), bblock);
 
 	context.popBlock();
 	std::cout << "Creating function: " << id.name << endl;

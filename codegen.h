@@ -39,7 +39,9 @@ class CodeGenContext {
 
 public:
     Module *module;
-    CodeGenContext() {
+    IRBuilder<> builder;
+
+    CodeGenContext() : builder(getGlobalContext()) {
         // see http://comments.gmane.org/gmane.comp.compilers.llvm.devel/33877
         InitializeNativeTarget();
         module = new Module("main", getGlobalContext());

@@ -7,6 +7,11 @@ int do_math(int a) {
   return x + b
 }
 
+void test() {
+    return
+}
+
 echo(do_math(11))
 echo(do_math(12))
 printi(10)
+test()

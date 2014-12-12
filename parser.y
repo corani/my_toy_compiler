@@ -62,7 +62,8 @@ stmts : stmt { $$ = new NBlock(); $$->statements.push_back($<stmt>1); }
 
 stmt : var_decl | func_decl | extern_decl
 	 | expr { $$ = new NExpressionStatement(*$1); }
-	 | TRETURN expr { $$ = new NReturnStatement(*$2); }
+	 | TRETURN expr { $$ = new NReturnStatement($2); }
+     | TRETURN { $$ = new NReturnStatement(); }
      ;
 
 block : TLBRACE stmts TRBRACE { $$ = $2; }

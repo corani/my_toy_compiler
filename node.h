@@ -97,9 +97,10 @@ public:
 
 class NReturnStatement : public NStatement {
 public:
-	NExpression& expression;
-	NReturnStatement(NExpression& expression) :
+	NExpression *expression;
+	NReturnStatement(NExpression *expression) :
 		expression(expression) { }
+    NReturnStatement() : expression(nullptr) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
