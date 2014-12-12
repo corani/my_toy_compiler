@@ -1,7 +1,7 @@
 %{
 	#include "node.h"
-        #include <cstdio>
-        #include <cstdlib>
+    #include <cstdio>
+    #include <cstdlib>
 	NBlock *programBlock; /* the top level root node of our final AST */
 
 	extern int yylex();
@@ -26,7 +26,7 @@
    match our tokens.l lex file. We also define the node type
    they represent.
  */
-%token <string> TIDENTIFIER TINTEGER TDOUBLE
+%token <string> TIDENTIFIER TINTEGER TDOUBLE TBOOLEAN
 %token <token> TCEQ TCNE TCLT TCLE TCGT TCGE TEQUAL
 %token <token> TLPAREN TRPAREN TLBRACE TRBRACE TCOMMA TDOT
 %token <token> TPLUS TMINUS TMUL TDIV
@@ -91,6 +91,7 @@ ident : TIDENTIFIER { $$ = new NIdentifier(*$1); delete $1; }
 
 numeric : TINTEGER { $$ = new NInteger(atol($1->c_str())); delete $1; }
 		| TDOUBLE { $$ = new NDouble(atof($1->c_str())); delete $1; }
+        | TBOOLEAN { $$ = new NBoolean($1->compare("true") == 0); delete $1; }
 		;
 	
 expr : ident TEQUAL expr { $$ = new NAssignment(*$<ident>1, *$3); }
@@ -110,6 +111,7 @@ call_args : /*blank*/  { $$ = new ExpressionList(); }
 		  | call_args TCOMMA expr  { $1->push_back($3); }
 		  ;
 
-comparison : TCEQ | TCNE | TCLT | TCLE | TCGT | TCGE;
+comparison : TCEQ | TCNE | TCLT | TCLE | TCGT | TCGE
+           ;
 
 %%

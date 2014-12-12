@@ -72,6 +72,9 @@ static Type *typeOf(const NIdentifier& type)
 	else if (type.name.compare("double") == 0) {
 		return Type::getDoubleTy(getGlobalContext());
 	}
+    else if (type.name.compare("bool") == 0) {
+        return Type::getInt1Ty(getGlobalContext());
+    }
 	return Type::getVoidTy(getGlobalContext());
 }
 
@@ -87,6 +90,12 @@ Value* NDouble::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating double: " << value << endl;
 	return ConstantFP::get(Type::getDoubleTy(getGlobalContext()), value);
+}
+
+Value* NBoolean::codeGen(CodeGenContext& context)
+{
+    std::cout << "Creating boolean: " << value << endl;
+    return ConstantInt::get(Type::getInt1Ty(getGlobalContext()), value);
 }
 
 Value* NIdentifier::codeGen(CodeGenContext& context)
@@ -119,27 +128,35 @@ Value* NMethodCall::codeGen(CodeGenContext& context)
 Value* NBinaryOperator::codeGen(CodeGenContext& context)
 {
 	std::cout << "Creating binary operation " << op << endl;
-	Instruction::BinaryOps instr;
+    Value* left = lhs.codeGen(context);
+    Value* right= rhs.codeGen(context);
+
+    IRBuilder<> builder(getGlobalContext());
+    builder.SetInsertPoint(context.currentBlock());
 	switch (op) {
 		case TPLUS:
-            instr = Instruction::Add;
-            break;
+            return builder.CreateAdd(left, right);
 		case TMINUS:
-            instr = Instruction::Sub;
-            break;
+            return builder.CreateSub(left, right);
 		case TMUL:
-            instr = Instruction::Mul;
-            break;
+            return builder.CreateMul(left, right);
 		case TDIV:
-            instr = Instruction::SDiv;
-            break;
-		/* TODO comparison */
+            return builder.CreateSDiv(left, right);
+        case TCEQ:
+            return builder.CreateICmpEQ(left, right);
+        case TCNE:
+            return builder.CreateICmpNE(left, right);
+        case TCLT:
+            return builder.CreateICmpSLT(left, right);
+        case TCLE:
+            return builder.CreateICmpSLE(left, right);
+        case TCGT:
+            return builder.CreateICmpSGT(left, right);
+        case TCGE:
+            return builder.CreateICmpSGE(left, right);
         default:
             return nullptr;
 	}
-
-	return BinaryOperator::Create(instr, lhs.codeGen(context),
-		rhs.codeGen(context), "", context.currentBlock());
 }
 
 Value* NAssignment::codeGen(CodeGenContext& context)
